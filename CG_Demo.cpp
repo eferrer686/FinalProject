@@ -32,16 +32,33 @@
 #include "Bezier.h"
 #include "Point.h"
 #include "Person.h"
+#include "CG_Demo.h"
+#include "Legorreta.h"
+#include "Player.h"
+#include "Camera.h"
 
 #define CTRL_POINTS 5
+#define NUM_ALUMNOS 99  //Multiplos de 3
 
 unsigned int  texture_id = 0;
 
-Bezier* bez;
-Point* ctrl[CTRL_POINTS+2];
-Person* traveler;
+Person* alumnos[NUM_ALUMNOS];
 float param;				//time step
 float dir;					//direction in time
+
+Player* player;
+
+int mouseCoords[2], mouseMotionType = 0;
+Camera* mainCam;
+
+Legorreta* lego;
+
+GLfloat* Ia;
+GLfloat* Id;
+GLfloat* Is;
+GLfloat* Ip;
+GLfloat* global_ambient;
+
 
 void axes() {
 	glLineWidth(5.0f);
@@ -67,70 +84,104 @@ void axes() {
 
 void init() // FOR GLUT LOOP
 {
-	glEnable(GL_DEPTH_TEST);			// Enable check for close and far objects.
-	glClearColor(0.0, 0.0, 0.0, 0.0);	// Clear the color state.
-	glMatrixMode(GL_MODELVIEW);			// Go to 3D mode.
-	glLoadIdentity();					// Reset 3D view matrix.
 
 
-	float x1 = -5;
-	float z1 = -5;
-	float x2 = 5;
-	float z2 = 5;
+	mainCam = new Camera();
 
-	ctrl[0] = new Point(x1, 0, z1, 0, 1, 0);	//Begin point
-	ctrl[CTRL_POINTS+1] = new Point(x2, 0, z2, 0, 0, 1);	//Goal point
-	
-	float xr = 0;		//random in x
-	float zr = 0;		//random in z
+	//3 different starting points only 1 goal
+	float goalx = -30;
+	float goalz = 0;
 
-	//Generate Points in random position between begin and end
-	for (int i = 1; i < CTRL_POINTS+1; i++)
+	float p1x = 10;
+	float p1z = 0;
+
+	float p2x = 0;
+	float p2z = -20;
+
+
+	float p3x = 0;
+	float p3z = 20;
+
+	for (int i = 0; i < NUM_ALUMNOS/3; i++)
 	{
-		xr = x1 + fabs(x1-x2) * ((float)rand()) / (float)RAND_MAX;
-		zr = z1 + fabs(z1-z2) * ((float)rand()) / (float)RAND_MAX;
-		ctrl[i] = new Point(xr, 0, zr, 1, 0, 0);
+		Point* pi = new Point(goalx+(i/NUM_ALUMNOS), 0, goalz+(i/NUM_ALUMNOS), 1, 1, 1);
+		Point* pf = new Point(p1x, 0, p1z, 1, 1, 1);
+		
+		
+		alumnos[i] = new Person(pi, pi, pf);
+		alumnos[i]->param = 0.5;
 	}
 
-	//Create bezier
+	for (int i = (NUM_ALUMNOS / 3); i < (2*NUM_ALUMNOS) / 3; i++)
+	{
+		Point* pi = new Point(goalx + (i / NUM_ALUMNOS), 0, goalz + (i / NUM_ALUMNOS), 1, 1, 1);
+		Point* pf = new Point(p2x, 0, p2z, 1, 1, 1);
 
-	dir = 1;
-	param = 0.0001;
 
-	traveler = new Person(0, 0, 0, 0, 1, 0);
-	bez = new Bezier(CTRL_POINTS+1, ctrl);
+		alumnos[i] = new Person(pi, pi, pf);
+		alumnos[i]->param = 0.5;
+	}
+
+	for (int i = ((2*NUM_ALUMNOS) / 3); i < (3 * NUM_ALUMNOS) / 3; i++)
+	{
+		Point* pi = new Point(goalx + (i / NUM_ALUMNOS), 0, goalz + (i / NUM_ALUMNOS), 1, 1, 1);
+		Point* pf = new Point(p3x, 0, p3z, 1, 1, 1);
+
+
+		alumnos[i] = new Person(pi, pi, pf);
+		alumnos[i]->param = 0.5;
+	}
+
+	lego = new Legorreta();
+	
+	player = new Player(goalx, 0, goalz);		//You´re the big guy
+	
+
+
+	
+	glLoadIdentity(); // Reset 3D view matrix.
+
 }
 
 void display()							// Called for each frame (about 60 times per second).
 {
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);				// Clear color and depth buffers.
-	glLoadIdentity();												// Reset 3D view matrix.
-	gluLookAt(0.10, 25.1, 0.10,										// Where the camera is.
-		      0.0, 0.0, 0.0,										// To where the camera points at.
-		      0.0, 1.0, 0.0);										// "UP" vector.
 
 	axes();
 
-	//Draw points
-	for (int i = 0; i <= CTRL_POINTS+1; i++)
+	mainCam->setView();
+
+	lego->draw();
+
+	player->draw();
+	
+	//Draw alumnos
+	bool flagCollide = false;
+	for (int i = 0; i < NUM_ALUMNOS; i++)
 	{
-		ctrl[i]->draw();
+
+		alumnos[i]->draw();
+		
+		if (alumnos[i]->collidePlayer(player)) {
+			
+			alumnos[i]->dir *= -1;
+			flagCollide = true;
+		}
+
+		for (int j = 0; j < NUM_ALUMNOS; j++)
+		{
+			
+			if (!flagCollide && i!=j) {
+				flagCollide = alumnos[i]->collide(alumnos[j]);
+
+			}
+
+		}
+		flagCollide = false;
 	}
 
-
-	//Calculate traveler position
-	traveler = new Person(bez->evaluate(param));
-	//Draw position
-	traveler->draw();
-	delete traveler;
-
-	//Reverse dir if end of path
-	if (param <= 0) { param = 0.001; dir *= -1; }
-	if (param >= 1) { param = 0.999; dir *= -1; }
-
-	//Next step
-	param += 0.0001f * dir;
+	
 
 	glutSwapBuffers();												// Swap the hidden and visible buffers.
 
@@ -138,8 +189,98 @@ void display()							// Called for each frame (about 60 times per second).
 }
 void idle()															// Called when drawing is finished.
 {
+	player->update();
+
 	glutPostRedisplay();											// Display again.
 }
+void keys(int key, int x, int y)
+{
+
+	switch (key)
+	{
+	case GLUT_KEY_LEFT:
+		// izquierda
+		player->Left = 1;
+
+		break;
+
+	case GLUT_KEY_DOWN:
+		//  abajo
+		player->Down = 1;
+
+		break;
+
+	case GLUT_KEY_RIGHT:
+		// derecha
+		player->Right = 1;
+
+		break;
+
+	case GLUT_KEY_UP:
+		// arriba
+		player->Up = 1;
+
+		break;
+
+	}
+
+}
+
+void motion(int x, int y) {
+	switch (mouseMotionType)
+	{
+	case 1:	//FREE
+		mainCam->rotate((mouseCoords[0] - x)*-0.1, vector3f(0, 1, 0));
+		mainCam->rotate((mouseCoords[1] - y)*-0.1, vector3f(1, 0, 0));
+		mouseCoords[0] = x;
+		mouseCoords[1] = y;
+		break;
+	case 2:	//SHIFT
+		mainCam->moveAround((mouseCoords[0] - x)*0.1, vector3f(0, 1, 0));
+		mainCam->moveAround((mouseCoords[1] - y)*0.1, vector3f(1, 0, 0));
+		break;
+	case 3:	//ALT
+
+		break;
+	case 4:	//CTRL
+
+		break;
+	default:
+		break;
+	}
+}
+void mouse(int button, int state, int x, int y) {
+	int mods;
+	mouseCoords[0] = x;
+	mouseCoords[1] = y;
+	if (state == GLUT_DOWN) {
+		if (button == GLUT_LEFT_BUTTON) {
+
+		}
+		else if (button == GLUT_RIGHT_BUTTON) {
+
+		}
+		else {
+
+		}
+		mods = glutGetModifiers();
+
+		if (mods & GLUT_ACTIVE_SHIFT) {
+			mouseMotionType = 2;
+		}
+		else if (mods & GLUT_ACTIVE_ALT) {
+			mouseMotionType = 3;
+		}
+		else if (mods & GLUT_ACTIVE_CTRL) {
+			mouseMotionType = 4;
+		}
+		else {
+			mouseMotionType = 1;
+		}
+
+	}
+}
+
 
 void reshape(int x, int y)											// Called when the window geometry changes.
 {
@@ -160,9 +301,13 @@ int main(int argc, char* argv[])
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_DEPTH | GLUT_RGB);		// Use 2 buffers (hidden and visible). Use the depth buffer. Use 3 color channels.
 	glutInitWindowSize(800, 800);
 	glutCreateWindow("RTS");
+
 	
 	init();
 
+	glutSpecialFunc(keys);
+	glutMotionFunc(motion);
+	glutMouseFunc(mouse);
 
 	glutReshapeFunc(reshape);										// Reshape CALLBACK function.
 	glutDisplayFunc(display);										// Display CALLBACK function.

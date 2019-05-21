@@ -24,9 +24,9 @@
 #include <math.h>
 
 Camera::Camera() {
-	pos.x = 0;
-	pos.y = 0;
-	pos.z = 30;
+	pos.x = 0.1;
+	pos.y = 0.1;
+	pos.z = 40.1;
 
 	dir.x = 0;
 	dir.y = 0;
@@ -49,11 +49,6 @@ void Camera::setView()
 	int viewportCoords[4];
 	glGetIntegerv(GL_VIEWPORT, viewportCoords);
 
-	glMatrixMode(GL_PROJECTION); // GO to 2d Mode
-	glLoadIdentity(); //Reset
-	gluPerspective(fov,(GLfloat)viewportCoords[2]/ (GLfloat)viewportCoords[3],near_plane,far_plane);
-
-	glMatrixMode(GL_MODELVIEW);	//Go to 3d Mode
 	glLoadIdentity(); //Reset
 	gluLookAt(
 		pos.x, pos.y, pos.z,							//Position of camera

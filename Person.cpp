@@ -35,30 +35,20 @@ using namespace std;
 
 
 
-Person::Person(float _x, float _y, float _z, float _r, float _g, float _b)
+Person::Person(Point* p,Point* _pi,Point* _pf)
 {
-	x = _x;
-	y = _y;
-	z = _z;
-	r = _r;
-	g = _g;
-	b = _b;
-	xp = x;
-	zp = z;
+	pos = p;
+
+	pi = _pi;
+	pf = _pf;
+
+	r = g = b = 1.0f;
+
+	radius = 0.2f;
+	genRoute(pi,pf);
+
 	
 
-}
-
-Person::Person(Point* p)
-{
-
-	x = p->x;
-	y = p->y;
-	z = p->z;
-	r = 1;
-	g = 1;
-	b = 1;
-	
 }
 
 
@@ -76,7 +66,7 @@ Point* Person::evaluate(float t)
 
 
 Point* Person::multiplyByScalar(float _k){
-	Point* p = new Point(x, y, z, r, g, b);
+	Point* p = new Point(p->x, p->y, p->z, p->r, p->g, p->b);
 	p->x*= _k;
 	p->y*= _k;
 	p->z*= _k;
@@ -101,39 +91,84 @@ float Person::factorial(float n)
 	}
 }
 
+void Person::genRoute(Point *pi, Point *pf) {
+	float x1 = pi->x;
+	float z1 = pi->z;
+	float x2 = pf->x;
+	float z2 = pf->z;
+
+	ctrl[0] = new Point(x1, 0, z1, 0, 1, 0);	//Begin point
+	ctrl[CTRL_POINTS + 1] = new Point(x2, 0, z2, 0, 0, 1);	//Goal point
+
+	float xr = 0;		//random in x
+	float zr = 0;		//random in z
+
+	//Generate Points in random position between begin and end
+	for (int i = 1; i < CTRL_POINTS + 1; i++)
+	{
+		xr = x1 + fabs(x1 - x2) * ((float)rand()) / (float)RAND_MAX;
+		zr = z1 + fabs(z1 - z2) * ((float)rand()) / (float)RAND_MAX;
+		ctrl[i] = new Point(xr, 0, zr, 1, 0, 0);
+	}
+
+	//Create bezier
+
+	dir = 1;
+	param = 0.0001;
+
+	bez = new Bezier(CTRL_POINTS + 1, ctrl);
+
+}
 
 void Person::draw() {
 
+	pos = bez->evaluate(param);
+
+	//Reverse dir if end of path
+	if (param <= 0) { param = 0.001; dir *= -1; }
+	if (param >= 1) { param = 0.999; dir *= -1; }
+
+	//Next step
+	param += 0.0005f * dir;
+	   	 
+	//Draw points
+	/*for (int i = 0; i <= CTRL_POINTS + 1; i++)
+	{
+		ctrl[i]->draw();
+	}*/
+
+
 	glPushMatrix();
 	{
+		//renderColor();
 		//Head
-		glTranslatef(x, y, z);
-		glColor3f(r, g, b);
-		glutSolidSphere(0.5, 10, 10);
+		glTranslatef(pos->x, pos->y, pos->z);
+		
+		glutSolidSphere(radius, 10, 10);
 
 		//Shoulder 1
 		glPushMatrix();
 		{
-			glTranslatef(-0.5, 0, 0);
-			glColor3f(r, g, b);
-			glutSolidSphere(0.25, 10, 10);
+			glTranslatef(-radius, 0, 0);
+			
+			glutSolidSphere(radius/2, 10, 10);
 			//Hand 1
-			glTranslatef(-0.25, 0, 0);
-			glColor3f(r, g, b);
-			glutSolidSphere(0.125, 10, 10);
+			glTranslatef(-radius/2, 0, 0);
+			
+			glutSolidSphere(radius/4, 10, 10);
 		}
 		glPopMatrix();
 		
 		//Shoulder 2
 		glPushMatrix();
 		{
-			glTranslatef(0.5, 0, 0);
-			glColor3f(r, g, b);
-			glutSolidSphere(0.25, 10, 10);
+			glTranslatef(radius, 0, 0);
+			
+			glutSolidSphere(radius/2, 10, 10);
 			//Hand 2
-			glTranslatef(0.25, 0, 0);
-			glColor3f(r, g, b);
-			glutSolidSphere(0.125, 10, 10);
+			glTranslatef(radius/2, 0, 0);
+			
+			glutSolidSphere(radius/4, 10, 10);
 		}
 		glPopMatrix();
 		
@@ -142,12 +177,77 @@ void Person::draw() {
 }
 
 bool Person::collide(Person* p) {
-	if (x + 0.1 < p->x && x - 0.1 > p->x 
-		&& z + 0.1 < p->z && z - 0.1 > p->z)
+	
+	float dist = 0.0;
+
+	dist = ((p->pos->x - pos->x)*(p->pos->x - pos->x)) + ((p->pos->z - pos->z)*(p->pos->z - pos->z));
+	dist = sqrt(dist);
+
+	if (dist < radius +(radius*0.4))
+	{
+		
+		changeRoute();
+		dir *= -1;
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
+bool Person::collidePlayer(Player* p) {
+
+	float dist = 0.0;
+
+	dist = ((p->posX - pos->x)*(p->posX - pos->x)) + ((p->posZ - pos->z)*(p->posZ - pos->z));
+	dist = sqrt(dist);
+
+	if (dist < radius + (radius*3))
 	{
 		return true;
 	}
 	else {
 		return false;
 	}
+}
+
+void Person::changeRoute() {
+	
+
+	int indexI = floorf(CTRL_POINTS * ((float)rand()) / (float)RAND_MAX);
+	int indexF = floorf(CTRL_POINTS * ((float)rand()) / (float)RAND_MAX);
+
+	Point* temp = ctrl[indexI];
+	ctrl[indexI] = ctrl[indexF];
+	ctrl[indexF] = temp;
+
+	genRoute(ctrl[indexI],ctrl[CTRL_POINTS+1]);
+
+
+}
+
+void Person::renderColor() {
+	ka0 = new GLfloat[4];
+	ka0[0] = .6f;
+	ka0[1] = .6f;
+	ka0[2] = .6f;
+	ka0[3] = 1.0f;
+	kd0 = new GLfloat[4];
+	kd0[0] = .5f;
+	kd0[1] = .5f;
+	kd0[2] = .5f;
+	kd0[3] = 1.0f;
+
+	ks0 = new GLfloat[4];
+	ks0[0] = .5f;
+	ks0[1] = .5f;
+	ks0[2] = .5f;
+	ks0[3] = 1.0f;
+	alpha0 = new GLfloat[1];
+	alpha0[0] = 20.0f;
+
+	glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, ka0);
+	glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, kd0);
+	glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, ks0);
+	glMaterialfv(GL_FRONT_AND_BACK, GL_POSITION, alpha0);
 }
